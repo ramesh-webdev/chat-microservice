@@ -4,8 +4,8 @@ import mongoose from "mongoose";
 const userSchema = new mongoose.Schema(
   {
     phone: { type: String, required: true, unique: true },
-    name: String,
-    avatarUrl: String
+    name: { type: String},
+    avatarUrl: { type: String }
   },
   { timestamps: true }
 );

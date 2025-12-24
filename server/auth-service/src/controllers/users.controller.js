@@ -8,7 +8,8 @@ export const authUsers = async (req, res) => {
             $ne: currentUserId
         }
     }, {
-        phone: 1
+        phone: 1,
+        name: 1
     }).limit(100);
 
     res.json({

@@ -29,7 +29,7 @@ export default function NewChat({ onClose }) {
           onClick={() => selectUser(u)}
           className="p-3 border-b cursor-pointer hover:bg-gray-100"
         >
-          {u.phone}
+          {u.name || u.phone}
         </div>
       ))}
     </div>

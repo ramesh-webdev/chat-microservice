@@ -4,14 +4,6 @@ const auth = require('../middlewares/auth.middleware');
 const Conversation = require('../models/conversation.model');
 
 
-router.post('/', auth, async (req,res)=>{
-const { type='private', members=[], title } = req.body;
-const conv = new Conversation({ type, members, title });
-await conv.save();
-res.json({ conversation: conv });
-});
-
-
 router.get('/', auth, async (req,res)=>{
 const userId = req.user.id;
 

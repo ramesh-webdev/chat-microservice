@@ -13,15 +13,11 @@ export default function MessageBubble({ msg }) {
       >
         {msg.content}
         {isMine && (
-          <span
-            className={`text-xs ${
-              msg.status === "read" ? "text-blue-600" : "text-white"
-            } ml-1`}
-          >
+          <span className="text-xs ml-1">
             {msg.status === "sending" && "⏳"}
             {msg.status === "sent" && "✓"}
             {msg.status === "delivered" && "✓✓"}
-            {msg.status === "read" && "✓✓"}
+            {msg.status === "read" && <span className="text-blue-600">✓✓</span>}
           </span>
         )}
       </span>

@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from "react";
+import { v4 as uuid } from "uuid";
 import MessageBubble from "./MessageBubble";
 import MessageInput from "./MessageInput";
 import useSocket from "../../hooks/useSocket";
@@ -10,16 +11,27 @@ export default function ChatWindow() {
   const socket = useSocket();
   const typingTimeoutRef = useRef(null);
   const { activeChat } = useChatStore();
+  const isChatActive = useRef(false);
   const currentUserId = useAuthStore.getState().user._id;
   const [typingUsers, setTypingUsers] = useState({});
 
   const [messages, setMessages] = useState([]);
   const [cursor, setCursor] = useState(null);
   const [loadingOld, setLoadingOld] = useState(false);
+  const [messageStatuses, setMessageStatuses] = useState([]);
+  const [membersCount, setMembersCount] = useState(0);
 
-  /**
-   * 1️⃣ Load latest messages when conversation changes
-   */
+  function deriveStatus(message, statuses, currentUserId) {
+    if (message.senderId !== currentUserId) return;
+
+    const rows = statuses.filter((s) => s.messageId === message._id);
+    const others = rows.filter((r) => r.userId !== currentUserId);
+
+    if (others.some((r) => r.status === "read")) return "read";
+    if (others.some((r) => r.status === "delivered")) return "delivered";
+    return "sent";
+  }
+
   useEffect(() => {
     if (!activeChat?.conversationId) return;
 
@@ -28,21 +40,42 @@ export default function ChatWindow() {
 
     fetchMessages(activeChat.conversationId)
       .then((res) => {
-        const messagesWithStatus = res.data.messages.map((msg) => {
-          let status = "sent";
+        setMessageStatuses(res.data.statuses);
+        setMembersCount(res.data.membersCount);
 
-          if (msg.readBy?.length > 0) status = "read";
-          else if (msg.deliveredTo?.length > 0) status = "delivered";
+        const msgs = res.data.messages.map((msg) => {
+          if (msg.senderId !== currentUserId) return msg;
 
-          return { ...msg, status };
+          return {
+            ...msg,
+            status: deriveStatus(msg, res.data.statuses, currentUserId),
+          };
         });
 
-        setMessages(messagesWithStatus);
-
+        setMessages(msgs);
         setCursor(res.data.nextCursor);
       })
       .catch(console.error);
   }, [activeChat]);
+
+  useEffect(() => {
+    setMessages((prev) =>
+      prev.map((m) => {
+        if (m.senderId !== currentUserId) return m;
+        return {
+          ...m,
+          status: deriveStatus(m, messageStatuses, currentUserId),
+        };
+      })
+    );
+  }, [messageStatuses]);
+
+  useEffect(() => {
+    isChatActive.current = true;
+    return () => {
+      isChatActive.current = false;
+    };
+  }, [activeChat?.conversationId]);
 
   useEffect(() => {
     if (!socket || !activeChat?.conversationId) return;
@@ -56,34 +89,56 @@ export default function ChatWindow() {
       }));
     });
 
-    socket.on("message:delivered", ({ messageId }) => {
+    socket.on("message:sent", ({ clientMessageId, messageId }) => {
       setMessages((prev) =>
         prev.map((m) =>
-          m._id === messageId ? { ...m, status: "delivered" } : m
+          m.clientMessageId === clientMessageId
+            ? { ...m, _id: messageId, status: "sent" }
+            : m
         )
       );
     });
 
-    socket.on("message:read", ({ messageId }) => {
-      setMessages((prev) =>
-        prev.map((m) => (m._id === messageId ? { ...m, status: "read" } : m))
-      );
+    socket.on("message:new", (msg) => {
+      setMessages((prev) => [...prev, msg]);
     });
 
-    return () => socket.off("typing");
+    socket.on("message:status:update", ({ updates }) => {
+      setMessageStatuses((prev) => {
+        const map = new Map(prev.map((s) => [`${s.messageId}_${s.userId}`, s]));
+
+        updates.forEach((u) => {
+          map.set(`${u.messageId}_${u.userId}`, u);
+        });
+
+        return Array.from(map.values());
+      });
+    });
+
+    return () => {
+      socket.off("typing");
+      socket.off("message:sent");
+      socket.off("message:new");
+      socket.off("message:status:update");
+    };
   }, [socket, activeChat?.conversationId]);
+
+  useEffect(() => {
+    setTypingUsers({});
+  }, [activeChat?.conversationId]);
 
   const typingUserIds = Object.keys(typingUsers).filter(
     (id) => typingUsers[id]
   );
 
-  useEffect(() => {
-    if (!socket || !activeChat?.conversationId) return;
+useEffect(() => {
+  if (!socket || !activeChat?.conversationId) return;
+  if (!isChatActive.current) return;
 
-    socket.emit("conversation:read", {
-      conversationId: activeChat.conversationId,
-    });
-  }, [activeChat?.conversationId]);
+  socket.emit("conversation:read", {
+    conversationId: activeChat.conversationId,
+  });
+}, [messages]);
 
   /**
    * 2️⃣ Join / leave socket room
@@ -93,26 +148,6 @@ export default function ChatWindow() {
 
     socket.emit("join_conversation", {
       conversationId: activeChat.conversationId,
-    });
-
-    socket.on("message:new", (msg) => {
-      if (msg.conversationId !== activeChat.conversationId) return;
-
-      setMessages((prev) => {
-        const index = prev.findIndex(
-          (m) => m.clientMessageId && m.clientMessageId === msg.clientMessageId
-        );
-
-        // 🔁 replace optimistic message
-        if (index !== -1) {
-          const updated = [...prev];
-          updated[index] = msg;
-          return updated;
-        }
-
-        // 📩 normal incoming message
-        return [...prev, msg];
-      });
     });
 
     return () => {
@@ -186,17 +221,14 @@ export default function ChatWindow() {
 
     const tempId = "temp_" + Date.now();
 
-    // 👇 ADD MESSAGE LOCALLY
     setMessages((prev) => [
       ...prev,
       {
         _id: tempId,
         clientMessageId: tempId,
-        conversationId: activeChat.conversationId || "pending",
-        senderId: currentUserId, // will be derived properly in MessageBubble
+        senderId: currentUserId,
         content: text,
         status: "sending",
-        optimistic: true,
       },
     ]);
 

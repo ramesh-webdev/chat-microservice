@@ -1,174 +1,156 @@
 const jwt = require("jsonwebtoken");
 const Message = require("../models/message.model");
 const Conversation = require("../models/conversation.model");
+const MessageStatus = require("../models/messagestatus.model");
 
 module.exports = function (io, redisAdapter) {
-  // attach redis adapter if provided
   if (redisAdapter) io.adapter(redisAdapter);
 
   io.on("connection", (socket) => {
-    // authenticate token from handshake
-    const token = socket.handshake.auth && socket.handshake.auth.token;
-    if (!token) {
-      socket.disconnect(true);
-      return;
-    }
+    const token = socket.handshake.auth?.token;
+    if (!token) return socket.disconnect(true);
+
     let payload;
     try {
       payload = jwt.verify(token, process.env.JWT_SECRET);
-    } catch (e) {
-      socket.disconnect(true);
-      return;
+    } catch {
+      return socket.disconnect(true);
     }
 
-    socket.user = {
-      id: payload.id,
-    };
+    socket.user = { id: payload.id };
+    socket.join(`user_${socket.user.id}`);
 
-    const userId = socket.user.id;
-    socket.join(`user_${userId}`);
-
+    /* ---------------- JOIN CONVERSATION ---------------- */
     socket.on("join_conversation", async ({ conversationId }) => {
       const conv = await Conversation.findOne({
         _id: conversationId,
         "members.userId": socket.user.id,
       });
-
       if (!conv) return;
 
       socket.join(`conv_${conversationId}`);
 
-      // 1️⃣ find messages NOT YET delivered to this user
-      const undelivered = await Message.find({
-        conversationId,
-        senderId: { $ne: socket.user.id },
-        deliveredTo: { $ne: socket.user.id },
-      });
+      const messageIds = await Message.find(
+        { conversationId },
+        { _id: 1 }
+      ).lean();
 
-      // 2️⃣ mark delivered PER MESSAGE
-      for (const msg of undelivered) {
-        msg.deliveredTo.push(socket.user.id);
-        await msg.save();
+      const ids = messageIds.map((m) => m._id);
 
-        // 3️⃣ notify senders
-        io.to(`conv_${conversationId}`).emit("message:delivered", {
-          messageId: msg._id,
-          userId: socket.user.id,
+      // 1️⃣ Find affected rows FIRST
+      const affected = await MessageStatus.find({
+        userId: socket.user.id,
+        messageId: { $in: ids },
+        status: "sent",
+      }).lean();
+
+      // 2️⃣ Update them
+      if (affected.length > 0) {
+        await MessageStatus.updateMany(
+          { _id: { $in: affected.map((a) => a._id) } },
+          { $set: { status: "delivered" } }
+        );
+
+        // 3️⃣ Emit ONLY what changed
+        socket.to(`conv_${conversationId}`).emit("message:status:update", {
+          updates: affected.map((a) => ({
+            messageId: a.messageId,
+            userId: a.userId,
+            status: "delivered",
+          })),
         });
       }
     });
 
-    socket.on("leave_conversation", ({ conversationId }) => {
-      socket.leave(`conv_${conversationId}`);
-    });
-
+    /* ---------------- SEND MESSAGE ---------------- */
     socket.on(
       "message:create",
-      async ({ conversationId, content, receiverId, clientMessageId }) => {
+      async ({ conversationId, receiverId, content, clientMessageId }) => {
         let conv;
 
         if (!conversationId && receiverId) {
           conv = await Conversation.findOne({
             type: "private",
-            "members.userId": {
-              $all: [socket.user.id, receiverId],
-            },
+            "members.userId": { $all: [socket.user.id, receiverId] },
           });
 
           if (!conv) {
             conv = await Conversation.create({
               type: "private",
-              members: [
-                {
-                  userId: socket.user.id,
-                },
-                {
-                  userId: receiverId,
-                },
-              ],
+              members: [{ userId: socket.user.id }, { userId: receiverId }],
             });
           }
-
-          socket.join(`conv_${conv._id}`);
-          // notify BOTH sides
-          socket.emit("conversation:created", {
-            conversationId: conv._id,
-          });
-          io.to(`user_${receiverId}`).emit("conversation:created", {
-            conversationId: conv._id,
-          });
         } else {
           conv = await Conversation.findOne({
             _id: conversationId,
             "members.userId": socket.user.id,
           });
-
-          if (!conv) return;
         }
+
+        if (!conv) return;
 
         const msg = await Message.create({
           conversationId: conv._id,
           senderId: socket.user.id,
           content,
           clientMessageId,
-          status: "sent",
         });
 
-        conv.lastMessage = content;
-        conv.updatedAt = new Date();
-        await conv.save();
+        const statuses = conv.members.map((m) => ({
+          messageId: msg._id,
+          userId: m.userId,
+          status: "sent",
+        }));
 
-        io.to(`conv_${conv._id}`).emit("message:new", {
-          _id: msg._id,
-          conversationId: conv._id,
-          senderId: msg.senderId,
-          content: msg.content,
+        await MessageStatus.insertMany(statuses);
+
+        socket.emit("message:sent", {
           clientMessageId,
-          status: "sent",
-          createdAt: msg.createdAt,
+          messageId: msg._id,
         });
+
+        socket.to(`conv_${conv._id}`).emit("message:new", msg);
       }
     );
 
+    /* ---------------- READ CONVERSATION ---------------- */
     socket.on("conversation:read", async ({ conversationId }) => {
-      const unread = await Message.find({
-        conversationId,
-        senderId: { $ne: socket.user.id },
-        readBy: { $ne: socket.user.id },
-      });
+      const messages = await Message.find(
+        { conversationId },
+        { _id: 1 }
+      ).lean();
 
-      for (const msg of unread) {
-        msg.readBy.push(socket.user.id);
-        await msg.save();
+      const ids = messages.map((m) => m._id);
 
-        io.to(`conv_${conversationId}`).emit("message:read", {
-          messageId: msg._id,
-          userId: socket.user.id,
+      const affected = await MessageStatus.find({
+        userId: socket.user.id,
+        messageId: { $in: ids },
+        status: { $ne: "read" },
+      }).lean();
+
+      if (affected.length > 0) {
+        await MessageStatus.updateMany(
+          { _id: { $in: affected.map((a) => a._id) } },
+          { $set: { status: "read" } }
+        );
+
+        socket.to(`conv_${conversationId}`).emit("message:status:update", {
+          updates: affected.map((a) => ({
+            messageId: a.messageId,
+            userId: a.userId,
+            status: "read",
+          })),
         });
       }
     });
 
+    /* ---------------- TYPING ---------------- */
     socket.on("typing", async ({ conversationId, isTyping }) => {
-      if (!conversationId) return;
-
-      // 🔐 authorize membership
-      const conv = await Conversation.findOne({
-        _id: conversationId,
-        "members.userId": socket.user.id,
-      });
-
-      if (!conv) return;
-
-      // emit to everyone else in the room
       socket.to(`conv_${conversationId}`).emit("typing", {
         conversationId,
         userId: socket.user.id,
         isTyping,
       });
-    });
-
-    socket.on("disconnect", () => {
-      // cleanups if needed
     });
   });
 };

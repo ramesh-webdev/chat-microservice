@@ -9,7 +9,7 @@ export default function ChatList() {
   const [showNewChat, setShowNewChat] = useState(false);
   const [conversations, setConversations] = useState([]);
   const [userMap, setUserMap] = useState({});
-    const currentUserId = useAuthStore.getState().user._id;
+  const currentUserId = useAuthStore.getState().user._id;
 
   const setActiveChat = useChatStore((s) => s.setActiveChat);
 
@@ -23,12 +23,16 @@ export default function ChatList() {
     });
   }, []);
 
-  // 1️⃣ Fetch existing conversations
-  useEffect(() => {
+  const fetchConversations = () => {
     api
       .get("/chat/conversations")
       .then((res) => setConversations(res.data.conversations || []))
       .catch(console.error);
+  };
+
+  // 1️⃣ Fetch existing conversations
+  useEffect(() => {
+    fetchConversations();
   }, []);
 
   // 2️⃣ Click existing conversation
@@ -85,7 +89,7 @@ export default function ChatList() {
       </div>
 
       {/* New chat modal */}
-      {showNewChat && <NewChat onClose={() => setShowNewChat(false)} />}
+      {showNewChat && <NewChat onClose={() => setShowNewChat(false)} onChatCreated={fetchConversations} />}
     </div>
   );
 }

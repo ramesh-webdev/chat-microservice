@@ -2,8 +2,11 @@ import { useEffect, useState } from "react";
 import { fetchUsers } from "../../services/users.api";
 import { useChatStore } from "../../stores/chat.store";
 
-export default function NewChat({ onClose }) {
+import CreateGroupModal from "./CreateGroupModal";
+
+export default function NewChat({ onClose, onChatCreated }) {
   const [users, setUsers] = useState([]);
+  const [showGroupModal, setShowGroupModal] = useState(false);
   const setActiveChat = useChatStore((s) => s.setActiveChat);
 
   useEffect(() => {
@@ -19,9 +22,29 @@ export default function NewChat({ onClose }) {
     onClose();
   };
 
+  if (showGroupModal) {
+    return (
+      <CreateGroupModal
+        onClose={() => setShowGroupModal(false)}
+        onSuccess={(group) => {
+          onChatCreated && onChatCreated();
+          onClose();
+        }}
+      />
+    );
+  }
+
   return (
     <div className="p-4">
-      <h2 className="font-semibold mb-3">New Chat</h2>
+      <div className="flex justify-between items-center mb-3">
+        <h2 className="font-semibold">New Chat</h2>
+        <button
+          onClick={() => setShowGroupModal(true)}
+          className="text-sm text-blue-600 hover:underline"
+        >
+          Create Group
+        </button>
+      </div>
 
       {users.map((u) => (
         <div

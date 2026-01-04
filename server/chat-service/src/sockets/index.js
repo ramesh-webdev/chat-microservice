@@ -65,7 +65,7 @@ module.exports = function (io, redisAdapter) {
     /* ---------------- SEND MESSAGE ---------------- */
     socket.on(
       "message:create",
-      async ({ conversationId, receiverId, content, clientMessageId }) => {
+      async ({ conversationId, receiverId, content, clientMessageId, attachments }) => {
         let conv;
 
         if (!conversationId && receiverId) {
@@ -94,9 +94,15 @@ module.exports = function (io, redisAdapter) {
           senderId: socket.user.id,
           content,
           clientMessageId,
+          attachments: attachments || [],
         });
 
-        const statuses = conv.members.map((m) => ({
+        const uniqueMembers = new Map();
+        conv.members.forEach((m) => {
+          uniqueMembers.set(m.userId.toString(), m);
+        });
+
+        const statuses = Array.from(uniqueMembers.values()).map((m) => ({
           messageId: msg._id,
           userId: m.userId,
           status: "sent",

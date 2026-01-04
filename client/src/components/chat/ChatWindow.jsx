@@ -131,14 +131,14 @@ export default function ChatWindow() {
     (id) => typingUsers[id]
   );
 
-useEffect(() => {
-  if (!socket || !activeChat?.conversationId) return;
-  if (!isChatActive.current) return;
+  useEffect(() => {
+    if (!socket || !activeChat?.conversationId) return;
+    if (!isChatActive.current) return;
 
-  socket.emit("conversation:read", {
-    conversationId: activeChat.conversationId,
-  });
-}, [messages]);
+    socket.emit("conversation:read", {
+      conversationId: activeChat.conversationId,
+    });
+  }, [messages]);
 
   /**
    * 2️⃣ Join / leave socket room
@@ -238,6 +238,7 @@ useEffect(() => {
         conversationId: activeChat.conversationId,
         content: text,
         clientMessageId: tempId,
+        attachments: msg.attachments || [],
       });
     }
 
@@ -246,6 +247,7 @@ useEffect(() => {
         receiverId: activeChat.userId,
         content: text,
         clientMessageId: tempId,
+        attachments: msg.attachments || [],
       });
     }
   };

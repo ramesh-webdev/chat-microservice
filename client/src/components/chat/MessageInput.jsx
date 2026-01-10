@@ -1,10 +1,26 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
+import EmojiPicker from "emoji-picker-react";
 import { uploadFile } from "../../services/chat.api";
 
 export default function MessageInput({ onSend, onTyping }) {
   const [text, setText] = useState("");
   const [attachments, setAttachments] = useState([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const pickerRef = useRef(null);
+
+  // Close picker when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (pickerRef.current && !pickerRef.current.contains(event.target)) {
+        setShowEmojiPicker(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   const handleFileChange = async (e) => {
     if (!e.target.files[0]) return;
@@ -21,15 +37,34 @@ export default function MessageInput({ onSend, onTyping }) {
     }
   };
 
+  const onEmojiClick = (emojiData) => {
+    setText((prev) => prev + emojiData.emoji);
+    onTyping(); // Optional: Trigger typing status on emoji insertion
+  };
+
   const send = () => {
     if (!text.trim() && attachments.length === 0) return;
     onSend({ text, attachments, mine: true, _id: Date.now() });
     setText("");
     setAttachments([]);
+    setShowEmojiPicker(false);
   };
 
   return (
-    <div className="bg-white p-4 border-t border-slate-200">
+    <div className="bg-white p-4 border-t border-slate-200 relative">
+      {/* Emoji Picker Popover */}
+      {showEmojiPicker && (
+        <div ref={pickerRef} className="absolute bottom-20 left-4 z-50 shadow-2xl rounded-xl">
+          <EmojiPicker
+            onEmojiClick={onEmojiClick}
+            autoFocusSearch={false}
+            width={320}
+            height={400}
+            previewConfig={{ showPreview: false }}
+          />
+        </div>
+      )}
+
       {attachments.length > 0 && (
         <div className="flex gap-2 mb-2 p-2 overflow-x-auto bg-slate-50 rounded-lg border border-slate-100">
           {attachments.map((att, i) => (
@@ -46,13 +81,24 @@ export default function MessageInput({ onSend, onTyping }) {
         </div>
       )}
 
-      <div className="flex items-end gap-2 bg-slate-100 p-2 rounded-2xl border border-transparent focus-within:border-indigo-300 focus-within:bg-white focus-within:ring-2 focus-within:ring-indigo-100 transition-all">
+      <div className="flex items-end gap-2 bg-slate-100 p-2 rounded-2xl border border-transparent focus-within:border-indigo-300 focus-within:bg-white focus-within:ring-2 focus-within:ring-indigo-100 transition-all z-10 relative">
+        {/* Attachment Button */}
         <label className="p-2 cursor-pointer text-slate-400 hover:text-indigo-600 transition-colors">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
             <path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
           </svg>
           <input type="file" className="hidden" onChange={handleFileChange} />
         </label>
+
+        {/* Emoji Toggle Button */}
+        <button
+          onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+          className={`p-2 transition-colors ${showEmojiPicker ? "text-indigo-600" : "text-slate-400 hover:text-amber-500"}`}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.182 15.182a4.5 4.5 0 01-6.364 0M21 12a9 9 0 11-18 0 9 9 0 0118 0zM9.75 9.75c0 .414-.168.75-.375.75S9 10.164 9 9.75 9.168 9 9.375 9s.375.336.375.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm4.5 0c0 .414-.168.75-.375.75s-.375-.336-.375-.75.168-.75.375-.75.375.336.375.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+          </svg>
+        </button>
 
         <input
           value={text}

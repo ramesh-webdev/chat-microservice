@@ -1,5 +1,4 @@
 import { useEffect, useState, useRef } from "react";
-import { v4 as uuid } from "uuid";
 import MessageBubble from "./MessageBubble";
 import MessageInput from "./MessageInput";
 import useSocket from "../../hooks/useSocket";
@@ -96,11 +95,9 @@ export default function ChatWindow() {
     socket.on("message:status:update", ({ updates }) => {
       setMessageStatuses((prev) => {
         const map = new Map(prev.map((s) => [`${s.messageId}_${s.userId}`, s]));
-
         updates.forEach((u) => {
           map.set(`${u.messageId}_${u.userId}`, u);
         });
-
         return Array.from(map.values());
       });
     });
@@ -149,9 +146,6 @@ export default function ChatWindow() {
     });
   }, [messages]);
 
-  /**
-   * 2️⃣ Join / leave socket room
-   */
   useEffect(() => {
     if (!socket || !activeChat?.conversationId) return;
 
@@ -169,28 +163,19 @@ export default function ChatWindow() {
 
   useEffect(() => {
     if (!socket) return;
-
     socket.on("conversation:created", ({ conversationId }) => {
-      // switch mode
       useChatStore.getState().setActiveChat({
         mode: "conversation",
         conversationId,
         title: "Chat",
       });
-
-      // JOIN ROOM IMMEDIATELY
       socket.emit("join_conversation", { conversationId });
     });
-
     return () => socket.off("conversation:created");
   }, [socket]);
 
-  /**
-   * 3️⃣ Load older messages (pagination)
-   */
   const loadOlderMessages = async () => {
     if (!cursor || loadingOld) return;
-
     setLoadingOld(true);
     try {
       const res = await fetchMessages(activeChat.conversationId, cursor);
@@ -203,13 +188,11 @@ export default function ChatWindow() {
 
   const handleTyping = () => {
     if (!socket || !activeChat?.conversationId) return;
-
     socket.emit("typing", {
       conversationId: activeChat.conversationId,
       isTyping: true,
     });
 
-    // debounce stop typing
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
     }
@@ -222,12 +205,8 @@ export default function ChatWindow() {
     }, 800);
   };
 
-  /**
-   * 4️⃣ Send message
-   */
   const sendMessage = (msg) => {
     const text = msg.text;
-
     const tempId = "temp_" + Date.now();
 
     setMessages((prev) => [
@@ -241,7 +220,6 @@ export default function ChatWindow() {
       },
     ]);
 
-    // 👇 SEND TO BACKEND
     if (activeChat.mode === "conversation") {
       socket.emit("message:create", {
         conversationId: activeChat.conversationId,
@@ -263,28 +241,49 @@ export default function ChatWindow() {
 
   if (!activeChat) {
     return (
-      <div className="h-full flex items-center justify-center text-gray-500">
-        Select a chat
+      <div className="h-full flex flex-col items-center justify-center bg-slate-50 text-slate-400">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-16 h-16 mb-4 opacity-50">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
+        </svg>
+        <span className="text-lg">Select a chat to start messaging</span>
       </div>
     );
   }
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col bg-slate-50">
       {/* Header */}
-      <div className="p-3 border-b font-semibold">
-        {activeChat.title || "Chats"}
+      <div className="px-6 py-4 bg-white border-b border-slate-200 flex items-center justify-between shadow-sm z-10">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-lg">
+            {(activeChat.title || "C").charAt(0).toUpperCase()}
+          </div>
+          <div>
+            <h2 className="font-bold text-slate-800 leading-tight">
+              {activeChat.title || "Chat"}
+            </h2>
+            {typingUserIds.length > 0 ? (
+              <span className="text-xs text-indigo-500 font-medium animate-pulse">typing...</span>
+            ) : (
+              <span className="text-xs text-slate-500">
+                {activeChat.mode === 'conversation' && membersCount > 0 ? `${membersCount} members` : 'Online'}
+              </span>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-auto p-4">
+      <div className="flex-1 overflow-auto p-6 space-y-2 relative">
         {cursor && (
-          <button
-            onClick={loadOlderMessages}
-            className="text-sm text-blue-500 mb-3"
-          >
-            {loadingOld ? "Loading..." : "Load older messages"}
-          </button>
+          <div className="text-center mb-4">
+            <button
+              onClick={loadOlderMessages}
+              className="px-4 py-1 text-xs font-medium text-slate-500 bg-slate-200 rounded-full hover:bg-slate-300 transition-colors"
+            >
+              {loadingOld ? "Loading..." : "Load older messages"}
+            </button>
+          </div>
         )}
 
         {messages.map((msg) => (
@@ -292,9 +291,6 @@ export default function ChatWindow() {
         ))}
       </div>
 
-      {typingUserIds.length > 0 && (
-        <div className="text-sm text-gray-500 px-4 pb-2">typing...</div>
-      )}
       {/* Input */}
       <MessageInput onSend={sendMessage} onTyping={handleTyping} />
     </div>

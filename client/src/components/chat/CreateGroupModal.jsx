@@ -57,7 +57,7 @@ export default function CreateGroupModal({ onClose, onSuccess }) {
                             className={`p-2 cursor-pointer flex justify-between items-center hover:bg-gray-50 ${selectedUsers.includes(u._id) ? "bg-blue-50" : ""
                                 }`}
                         >
-                            <span>{u.name}</span>
+                            <span>{u.name || u.phone}</span>
                             {selectedUsers.includes(u._id) && (
                                 <span className="text-blue-600">✓</span>
                             )}

@@ -89,16 +89,6 @@ export default function ChatWindow() {
       }));
     });
 
-    socket.on("message:sent", ({ clientMessageId, messageId }) => {
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.clientMessageId === clientMessageId
-            ? { ...m, _id: messageId, status: "sent" }
-            : m
-        )
-      );
-    });
-
     socket.on("message:new", (msg) => {
       setMessages((prev) => [...prev, msg]);
     });
@@ -117,7 +107,6 @@ export default function ChatWindow() {
 
     return () => {
       socket.off("typing");
-      socket.off("message:sent");
       socket.off("message:new");
       socket.off("message:status:update");
     };
@@ -130,6 +119,26 @@ export default function ChatWindow() {
   const typingUserIds = Object.keys(typingUsers).filter(
     (id) => typingUsers[id]
   );
+
+  useEffect(() => {
+    if (!socket) return;
+
+    const onMessageSent = ({ clientMessageId, messageId }) => {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.clientMessageId === clientMessageId
+            ? { ...m, _id: messageId, status: "sent" }
+            : m
+        )
+      );
+    };
+
+    socket.on("message:sent", onMessageSent);
+
+    return () => {
+      socket.off("message:sent", onMessageSent);
+    };
+  }, [socket]);
 
   useEffect(() => {
     if (!socket || !activeChat?.conversationId) return;

@@ -79,6 +79,8 @@ module.exports = function (io, redisAdapter) {
               type: "private",
               members: [{ userId: socket.user.id }, { userId: receiverId }],
             });
+
+            socket.emit("conversation:created", { conversationId: conv._id });
           }
         } else {
           conv = await Conversation.findOne({

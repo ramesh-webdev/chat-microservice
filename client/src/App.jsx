@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Login from './app/auth/Login';
+import Signup from './app/auth/Signup';
 import VerifyOtp from './app/auth/VerifyOtp';
 import ChatLayout from './app/chat/ChatLayout';
 import { useAuthStore } from './stores/auth.store';
@@ -10,6 +11,7 @@ function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/signup" element={<Signup />} />
       <Route path="/verify" element={<VerifyOtp />} />
       <Route path="/setup-profile" element={token ? <SetupProfile /> : <Navigate to="/login" />} />
       <Route path="/chat" element={token ? <ChatLayout /> : <Navigate to="/login" />} />

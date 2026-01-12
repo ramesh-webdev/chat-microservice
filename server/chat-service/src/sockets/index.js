@@ -117,7 +117,11 @@ module.exports = function (io, redisAdapter) {
           messageId: msg._id,
         });
 
-        socket.to(`conv_${conv._id}`).emit("message:new", msg);
+        // Emit to EACH member individually so their ChatList updates
+        // even if they haven't joined the conversation room.
+        uniqueMembers.forEach((m) => {
+          io.to(`user_${m.userId}`).emit("message:new", msg);
+        });
       }
     );
 
@@ -158,6 +162,67 @@ module.exports = function (io, redisAdapter) {
         conversationId,
         userId: socket.user.id,
         isTyping,
+      });
+    });
+
+    /* ---------------- REACT TO MESSAGE ---------------- */
+    socket.on("message:reaction", async ({ messageId, reaction }) => {
+      const msg = await Message.findById(messageId);
+      if (!msg) return;
+
+      // Remove existing reaction by this user if any
+      let reactions = msg.reactions || [];
+      const existingIndex = reactions.findIndex(r => r.userId.toString() === socket.user.id);
+
+      if (existingIndex > -1) {
+        // If clicking same reaction, remove it (toggle)
+        if (reactions[existingIndex].emoji === reaction) {
+          reactions.splice(existingIndex, 1);
+        } else {
+          // Change reaction
+          reactions[existingIndex].emoji = reaction;
+        }
+      } else {
+        // Add new
+        reactions.push({ userId: socket.user.id, emoji: reaction });
+      }
+
+      msg.reactions = reactions;
+      await msg.save();
+
+      io.to(`conv_${msg.conversationId}`).emit("message:reaction:update", {
+        messageId,
+        reactions
+      });
+
+      // Also emit to sender if they are not in the room (e.g. chat list view updates?) 
+      // Not strictly necessary for minimal MVP but good for consistency if we showed reactions in list.
+    });
+
+    /* ---------------- EDIT MESSAGE ---------------- */
+    socket.on("message:edit", async ({ messageId, newContent }) => {
+      const msg = await Message.findById(messageId);
+      if (!msg) return;
+
+      // 1. Check ownership
+      if (msg.senderId.toString() !== socket.user.id) return;
+
+      // 2. Check time limit (15 minutes)
+      const timeDiff = Date.now() - new Date(msg.createdAt).getTime();
+      if (timeDiff > 15 * 60 * 1000) {
+        // Could emit an error event back to user
+        return;
+      }
+
+      // 3. Update
+      msg.content = newContent;
+      msg.isEdited = true;
+      await msg.save();
+
+      io.to(`conv_${msg.conversationId}`).emit("message:content:update", {
+        messageId,
+        content: newContent,
+        isEdited: true
       });
     });
   });

@@ -18,6 +18,7 @@ const MessageSchema = new Schema(
     clientMessageId: String,
     attachments: [],
     reactions: [],
+    isEdited: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

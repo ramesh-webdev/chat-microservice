@@ -1,11 +1,3 @@
-auth-service/node_modules
-chat-service/node_modules
-gateway-service/node_modules
-media-service/node_modules
-notification-service/node_modules
 
-auth-service/.env
-chat-service/.env
-gateway-service/.env
-media-service/.env
-notification-service/.env
+node_modules
+.env

@@ -9,7 +9,6 @@ export default function MessageBubble({ msg, isSelected, onToggleSelect, selecti
   // Handle populated senderId (object) or raw ID (string)
   // Handle populated senderId (object) or raw ID (string)
   const senderId = msg.senderId?._id || msg.senderId;
-  console.log("senderId", senderId, "currentUserId", currentUserId);
   const isMine = String(senderId) === String(currentUserId);
   const socket = useSocket();
   const [showPicker, setShowPicker] = useState(false);

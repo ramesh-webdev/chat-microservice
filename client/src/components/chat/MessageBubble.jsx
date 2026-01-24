@@ -63,12 +63,10 @@ export default function MessageBubble({ msg, isSelected, onToggleSelect, selecti
         {!showPicker && !isMine && !selectionMode && (
           <button
             onClick={(e) => { e.stopPropagation(); setShowPicker(true); }}
-            className={`absolute -bottom-2 ${isMine ? "-left-8" : "-right-8"} opacity-0 group-hover:opacity-100 transition-opacity p-1 text-slate-400 hover:text-amber-500 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-full`}
+            className={`absolute -bottom-2 ${isMine ? "-left-8" : "-right-8"} opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-full text-lg leading-none`}
             title="Add reaction"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
-              <path fillRule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zm0 8.625a1.125 1.125 0 100 2.25 1.125 1.125 0 000-2.25zM15.375 12a1.125 1.125 0 112.25 0 1.125 1.125 0 01-2.25 0zM7.5 10.5a.75.75 0 00-7.5 0v.75a.75.75 0 00.75.75h7.5a.75.75 0 00.75-.75v-.75a.75.75 0 00-.75-.75zM6 15a.75.75 0 01.75-.75h10.5a.75.75 0 010 1.5H6.75A.75.75 0 016 15z" clipRule="evenodd" />
-            </svg>
+            😀
           </button>
         )}
 
